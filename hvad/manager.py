@@ -621,6 +621,16 @@ class TranslationManager(models.Manager):
     def untranslated(self):
         return self._fallback_manager.get_query_set()
 
+    def any_language(self):
+        if self.queryset_class is TranslationQueryset:
+            qs_class = TranslationAwareQueryset
+        else:
+            bases = [TranslationAwareQueryset if b is TranslationQueryset else b
+                     for b in self.queryset_class.__bases__]
+            qs_class = type('TranslationAware' + self.queryset_class.__name__,
+                            tuple(bases), dict(self.queryset_class.__dict__))
+        return qs_class(self.model, using=self.db)
+
     #===========================================================================
     # Internals
     #===========================================================================
