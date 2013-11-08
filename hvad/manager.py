@@ -931,11 +931,13 @@ class TranslationAwareQueryset(QuerySet):
     
 
 class TranslationAwareManager(models.Manager):
+    queryset_class = TranslationAwareQueryset
+
     def language(self, language_code=None):
         return self.get_query_set().language(language_code)
         
     def get_query_set(self):
-        qs = TranslationAwareQueryset(self.model, using=self.db)
+        qs = self.queryset_class(self.model, using=self.db)
         return qs
 
 

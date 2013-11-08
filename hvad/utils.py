@@ -27,9 +27,46 @@ def get_translation(instance, language_code=None):
     accessor = getattr(instance, opts.translations_accessor)
     return accessor.get(language_code=language_code)
 
+_translation_aware_managers = {}
 def get_translation_aware_manager(model):
-    from nani.manager import TranslationAwareManager
-    manager = TranslationAwareManager()
+    from django.db.models import Manager
+    from hvad.manager import (TranslationManager, TranslationAwareManager,
+                              TranslationQueryset, TranslationAwareQueryset)
+    global _translation_aware_managers
+    if model in _translation_aware_managers:
+        manager = _translation_aware_managers[model]()
+        manager.model = model
+        return manager
+
+    default_manager = model._default_manager.__class__
+    if issubclass(TranslationManager, default_manager):
+        manager_class = TranslationAwareManager
+    else:
+        bases = [TranslationAwareManager if issubclass(TranslationManager, b) else b
+                 for b in default_manager.__bases__]
+        try:
+            manager_class = type('TranslationAware' + default_manager.__name__,
+                                tuple(bases), dict(default_manager.__dict__))
+        except TypeError as e:
+            if 'duplicate base class' in e.message:
+                raise WrongManager('The default manager of the model may not '
+                                   'inherit both TranslationManager and Manager when '
+                                   'using get_translation_aware_manager. '
+                                   'Manager %r from model %r looks like it does.' %
+                                   (default_manager.__name__, model._meta.object_name))
+            raise
+        queryset_class = getattr(model._default_manager, 'queryset_class', TranslationQueryset)
+        if issubclass(TranslationQueryset, queryset_class):
+            qs_class = TranslationAwareQueryset
+        else:
+            bases = [TranslationAwareQueryset if issubclass(TranslationQueryset, b) else b
+                        for b in queryset_class.__bases__]
+            qs_class = type('TranslationAware' + queryset_class.__name__,
+                            tuple(bases), dict(queryset_class.__dict__))
+        setattr(manager_class, 'queryset_class', qs_class)
+        _translation_aware_managers[model] = manager_class
+
+    manager = manager_class()
     manager.model = model
     return manager
 
